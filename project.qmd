@@ -1,0 +1,413 @@
+---
+title: "A multi-level spatial analysis of crime-data in Maryland"
+author: "Rohit Singh"
+format: pdf
+editor: visual
+fontsize: 10pt
+execute: 
+  echo: false
+  warning: false
+bibliography: references.bib
+---
+
+```{r , message= FALSE, results='hide', warning=FALSE, echo=FALSE}
+
+## libraries_start
+library("gganimate")
+library("gifski")
+library("tidyverse")
+library("sf")
+library("scales")
+library("gridExtra")
+library("grid")
+library("cowplot")
+library("modelsummary")
+library("kableExtra")
+library("dplyr")
+library("gt")
+
+## libraries_end
+
+# Importing the data
+library(readr)
+crime_d1 <- read_csv("Violent_Crime___Property_Crime_by_County__1975_toPresent.csv")
+head(crime_d1)
+
+
+# Selecting and mutating the needed columns
+crime_d1 <- crime_d1 %>% 
+    select(counties = "County", YEAR, Population, crime_rate_h = "VIOLENT CRIME RATE PER 100,000 PEOPLE", crime_rate_p = "PROPERTY CRIME RATE PER 100,000 PEOPLE", crime_count_h = "VIOLENT CRIME TOTAL" , crime_count_p ="PROPERTY CRIME TOTALS" )
+
+# Peek at the data
+head(crime_d1)
+summary(crime_d1)
+```
+
+## Introduction
+
+Over the past decades, several studies have explored the trends in crime rates for different regions of the USA emphasizing the varying crime rate in the USA. This study attempts to explore the relationship between a select indicators of crime in the State of Maryland over time at the county level. Specifically, the study explores trends crime rate against property and hate crime rates. The study defines crime against property as crime committed for monetary gains such as offences of burglary, theft or arson. Such crimes have absence of force or threat of force against the victims.[^1] On the other hand, hate crime is one where the intent of the offender is to cause a physical or mental harm to the victim. There have several studies that have established a linear relationship for several forms of crimes across cities of the USA [@miethe1991]. In addition to this, the study also explores the relationship of number of hate crime in the counties of Maryland using Generalised linear mixed effects models. Since, the data has a panel arrangement, i.e., the data are collected by each county and year with data available for count of different forms of crimes, therefore, statistically, it makes theoretical sense to use Poisson error term instead of standard Gaussian error term for model fitting[@economet2008].
+
+[^1]: The study borrows the definition of various nature of crime from the Unforim Crime Reporting Handbook, published by U.S. Department of Justice.(<https://ucr.fbi.gov/additional-ucr-publications/ucr_handbook.pdf>)
+
+## Objectives
+
+The study attempts to explore if the trends of crime rates (crime rate against property and hate crime rate) have linear relationship over time, across counties of the State of Maryland. For the purpose, the study, foremost, tidy the data and plot crime rates against years. Drawing insight about the trends, the study then fits linear model (OLS) along with random intercept linear mixed model and random intercept-slopes linear mixed model. The study plots the geospatial maps of the population and the change in crime rate for the counties to argue for a case of non-linear relationship between population and indicator of crime. Therefore, the study explores if the reported incidents of hate crimes and property crime are changing over time for different counties in the State of Maryland. For the estimation, the study deploys poisson count model under Generalised linear model and Generalised linear mixed effects model. Finally, the study presents the findings of the GLMER modelling process using illustrative tools.
+
+## Data
+
+The data for the study have been sourced from the Maryland Statistical Analysis Center, an Open Data Portal by the State Government of Maryland, USA[^2]. The Center maintains a record of the several forms of crimes, along with other demographic variables at the county level, from 1975 till 2020. The study uses the county-level nested panel data-set for the regression analysis.
+
+[^2]: The data may be downloaded from the Open Data Portal by the State Government of Maryland. <https://opendata.maryland.gov/Public-Safety/Violent-Crime-Property-Crime-by-County-1975-to-Pre/jwfa-fdxs>
+
+Given the nested nature of the data-set, the study uses hierarchical modelling to ascertain if the indicators of crime (hate crime rate and crime rate against property) follow a linear trend in the State of Maryland from 1975 to 2020, the period of the study. For the analysis, foremost, the study selects the relevant indicators and counts of crime i.e., the crime rate against property, rate of hate crime, the count of reported crime against property and the count of reported hate crime across all the counties in the Maryland. Along with these variables, the data on demographic variable-population for all the counties in the Maryland is collated.
+
+Before, the study fit in a linear mixed effects model, it re-scales the Year variable so that the models don't fail to converge. The LMER model fits well when the intercept term is zero. LMER model is particularly used to ascertain if a linear trend through time can predict crime rates[^3]. Using the LMER model, the study estimates the a slope coefficient for the entire state as well as a coefficient for each county). Similar logic is used to fit in the GLMER model on the count data for reported crimes.
+
+[^3]: https://github.com/jroy042/MixedEffectsAreSometimesTerrible
+
+## Results
+
+| The study plots the linear fit graph for each county and examines how hate crime rate and crime rate against property change over time along with the corresponding linear fit for each county in the State of Maryland over the period of study. The study observes that almost all counties have different intercept and slope in the plots of hate crime rate and crime rate against property, as shown in @fig-1. While, the study observes mixed trends in linear fits for hate crime rate, the trends in linear fits for property crime are downward sloping for most of the counties. The varying trend across the period of study stand and differences in the crime rate at the study of the period of study, establish a basis for exploring linear effect mixed effects model with both random intercept and random slopes for data fitting.
+
+```{r, echo=FALSE}
+#| label: fig-1
+#| fig-cap: "Relationship between crime-rates and time for counties of Maryland"
+
+library(knitr)
+
+# Plot the data and linear trend lines
+
+library(gridExtra)
+
+plot1 <- ggplot(crime_d1, aes(x = YEAR, y = crime_rate_h, group = counties, colour= counties)) +
+  geom_line() + 
+  scale_y_log10()+
+  labs(x= "Years", y="Hate Crime rate", title = "Hate Crime Rate",
+       xlab = element_text(size = 4),
+       ylab = element_text(size = 8))+
+  stat_smooth(method = "lm",formula = "y~x", se = FALSE, size = 0.5)+
+  theme_bw()+
+  theme(legend.position = "none")
+
+plot2 <- ggplot(crime_d1, aes(x = YEAR, y = crime_rate_p, group = counties, colour = counties)) +
+  geom_line() +
+  scale_y_log10()+
+  labs(x= "Years", y="Crime rate against property", title = "Property Crime Rate",
+       xlab = element_text(size = 4),
+       ylab = element_text(size = 8))+
+  stat_smooth(method = 'lm', formula = "y~x", se = FALSE, size = 0.5)+
+  theme_bw()+
+  theme(legend.position = "none")
+
+plot1_legend <- ggplot(crime_d1, aes(x = YEAR, y = crime_rate_p, group = counties, colour = counties))+
+  geom_line() +
+  scale_y_log10()+
+  labs(x= "Years", y="Hate Crime rate", title = "Hate Crime Rate for counties in Maryland")+
+  stat_smooth(method = "lm",formula = "y~x", se = FALSE, size = 0.5)+
+  theme_bw()+
+  theme(legend.text = element_text(size = 5), legend.box = "horizontal", legend.position = "bottom", legend.justification = c( "left"))
+
+legend <- get_legend(plot1_legend)
+combined_plot <- grid.arrange(plot1, plot2, legend, ncol = 2, widths=c(10,10),heights=c(10,5))
+
+```
+
+| The counties in the State of Maryland have different population sizes, therefore there is a theoretical justification for incorporating population as one of the control variables in the specification. In the linear model and linear mixed effects model, the study estimates the following specifications (matrix notations):
+| $$  Crime rate =  X\beta + \epsilon       -    (1)   $$ $$  Crime rate =  X\beta + Zu + \epsilon     -     (2)  $$
+| In the specifications above, Crime rate is the dependent variable, which is captures crime rate against property and hate crime. $\beta$ is the unknown vector of fixed effects, $u$ is the unknown vector of random effects and $\epsilon$ is the unknown vector of Gaussian random errors in specification (2).
+| Estimating specification (1) using OLS, renders estimates as shown in @tbl-1. The columns 1 and 4 of the @tbl-1 show that there is a significant decreasing trend of both property crime rate and hate crime rate in the counties over time. However, this is a pooled regression and given nested nature of the data, the result would only be robust if the same is confirmed when the study deploys LMER models on the data. Indeed, so turns out to be the case, the LMER model (with random intercept) fit, in the columns 2 and 5 show that there is a statistical negative relationship of time and the crime variables. Lastly, the LMER model (with random intercept and slope)[^4] fit, in the column 3 and 6, also confirm a statistical negative relationship between the regressor and regressand.
+
+[^4]: It can be observed that the crime rate varies by county. The study incorporates this observation as the heuristic reason for inducing Year as both as random and fixed effect in the model.
+
+```{r, echo=FALSE}
+# Mutate data to create another year column, YEAR_2
+crime_d1 <-
+  crime_d1 %>%
+  mutate(YEAR_2 = YEAR - min(YEAR))
+
+```
+
+| Next, the study performs analysis of variance for the LMER models. The results of the the analysis of variance are presented in the @tbl-2 and @tbl-3 for property and hate crime rate respectively. The Chi-square value is statistically significant, favoring mixed effects model with random intercept and slopes model over only random intercept model. This is also confirmed by the lower log-likelihood value, lower AIC and BIC. This implies LMER with random intercept and slope model does better job in explaining the variability present in the data.
+
+```{r, echo=FALSE, results='hide'}
+# load the lmerTest package
+library(lmerTest)
+#Building a linear model(OLS)
+
+lm_crime <- lm(crime_rate_p ~ YEAR_2 + log(Population) + counties, data = crime_d1)
+
+# Building random incercept and random-slope models.
+lmer_crime_i <- lmer(crime_rate_p ~ YEAR_2 +  log(Population) + (1|counties), data= crime_d1)
+
+#using || instead of |, since year_2 and counties are uncorrelated. This means that the random effects are uncorrelated. Including the predictor as fixed effect allows the study to estimate the effect of the year_2 across all counties. Further including the predictor as a random effect allows the study to simultaneously correct for different slope estimates among the counties.
+
+lmer_crime_is <- lmer(crime_rate_p ~ YEAR_2 + log(Population) + (1+YEAR_2||counties), data= crime_d1)
+
+
+
+## LM models for hate crime
+lm_crimeh <- lm(crime_rate_h ~ YEAR_2 + log(Population) + counties, data = crime_d1)
+
+# Building random incercept and random-slope models.
+lmer_crime_ih <- lmer(crime_rate_h ~ YEAR_2 +  log(Population) + (1|counties), data= crime_d1)
+
+# Building random incercept and random-slope models.
+lmer_crime_ish <- lmer(crime_rate_h ~ YEAR_2 + log(Population) + (1+YEAR_2||counties), data= crime_d1)
+
+#ANOVA: Performing anova tests to see if the last model explains more variability than the previous models.
+mod11 <- anova(lmer_crime_i, lmer_crime_is)
+mod12 <- anova(lmer_crime_ih, lmer_crime_ish)
+
+# it can be observed from the anova output that the lmer_crime_is model explains a significant amount of variability than other two models under the null that all thee model explain the same qunatum of variability.
+
+#### Count model for hate crime analysis using poisson regression.
+
+
+glm_crime_h <- glm(crime_count_h ~ YEAR_2 + Population + counties, data = crime_d1, family = "poisson")
+
+glm_crime_p <- glm(crime_count_p ~ YEAR_2 + Population + counties, data = crime_d1, family = "poisson")
+#summary(glm_crime_h)
+#summary(glm_crime_p)
+
+glmer_crime_h <- glmer(crime_count_h ~ YEAR_2   + (1+ YEAR_2|counties), data = crime_d1, family = "poisson")
+glmer_crime_p <- glmer(crime_count_p ~ YEAR_2  + (1+ YEAR_2|counties), data = crime_d1, family = "poisson")
+#summary(glmer_crime_h)
+#summary(glmer_crime_p)
+
+mod2 <-  anova(glmer_crime_h, glm_crime_h, test = "Chisq")
+
+#mod3 <- anova(glm_crime_p, glmer_crime_p, test = "Chisq")
+
+```
+
+```{r}
+#| label: tbl-1
+#| tbl-cap: Linear Model and Linear Mixed Effects Model estimates
+
+
+models <- list(
+  "1" = lm(crime_rate_p ~ YEAR_2 + log(Population) + counties, data = crime_d1),
+  "2" = lmer(crime_rate_p ~ YEAR_2 +  log(Population) + (1|counties), data= crime_d1),
+  "3" = lmer(crime_rate_p ~ YEAR_2 + log(Population) + (1+YEAR_2||counties), data= crime_d1),
+  "4"= lm(crime_rate_h ~ YEAR_2 + log(Population) + counties, data = crime_d1),
+  "5" = lmer(crime_rate_h ~ YEAR_2 +  log(Population) + (1|counties), data= crime_d1),
+  "6" = lmer(crime_rate_h ~ YEAR_2 + log(Population) + (1+YEAR_2||counties), data= crime_d1)
+  )
+  
+modelsummary(models, fmt=2, stars = TRUE, coef_omit = ".*counties*", align = "lllllll", gof_omit = 'R2 Marg.|R2 Cond.|AIC|BIC|ICC', effects = "fixed", coef_rename = c("YEAR_2" = "Year"), notes = list('6: LMER model with intercept and slopes for hate crime rate', '5: LMER model with intercept for hate crime rate',  '3: LMER model with intercept and slopes for property crime rate; 4: LM for hate crime rate' ,'1: LM for property crime rate; 2: LMER model with intercept for property crime rate'))
+
+```
+
+```{r, echo=FALSE, results='hide'}
+#| label: fig-2
+#| fig-cap: Spatial maps comparison
+
+# Add the fixed-effect to the random-effect and save as county_slopes
+
+county_slopes_is <- fixef(lmer_crime_is)["YEAR_2"] + ranef(lmer_crime_is)$counties["YEAR_2"]
+
+# Add a new column with county names
+county_slopes_is <- county_slopes_is %>% rownames_to_column("counties")
+# Loading and filtering counties of the State of Maryland in the usmap package
+library(usmap)
+county_map <- us_map(regions = "counties", include = "MD")
+county_map <- rename(county_map, counties = county)
+
+## matching county names
+
+# See which counties are not in both datasets
+county_slopes_is %>% anti_join(county_map, by = "counties")
+county_map %>% anti_join(county_slopes_is, by = "counties")
+
+
+# merging crime data and shp files of the Maryland
+
+joined_data <- 
+  county_map %>% 
+  full_join(county_slopes_is, by = "counties") 
+
+#mapping the trends
+options(repr.plot.width=10, repr.plot.height=10)
+
+# population plot
+crime_pop <- crime_d1 %>% 
+    select(counties, YEAR, Population)
+crime_pop %>% anti_join(county_map, by = "counties")
+county_map %>% anti_join(crime_pop, by = "counties")
+pop_joined <- county_map%>%
+  full_join(crime_pop, by = "counties")
+crime_pop <- ggplot(data = pop_joined, aes(x = x, y = y, 
+                                          group = counties, fill= Population)) +   geom_polygon()+
+  ylab("latitude") +
+  xlab("longitude")+
+  theme_map()+
+  theme_classic()
+#print(crime_pop)
+
+# Plot the results 
+options(repr.plot.width=15, repr.plot.height=10)
+
+crime_map <- ggplot(data = joined_data, aes(x = x, y = y, 
+                                          group = counties, fill= YEAR_2)) + geom_polygon() + scale_fill_continuous(name = expression(atop("Change in crime rate", "from previous year")), low = "yellow", high = "red")
+
+crime_map_final <- crime_map +
+  ylab("latitude") +
+  xlab("longitude")+
+  theme_map()+
+  theme_classic()
+
+combined_plot <- grid.arrange(crime_pop,crime_map_final,  nrow =2)
+```
+
+| In the @fig-2, the study plots the spatial map of the State of Maryland with units as its counties. The figure consists of a spatial plot of total population of the each county in the Maryland and slope coefficient of the variable Year from the LMER with random intercepts and random slopes. The aim of the plot is to visualize if there are non-linear patterns of clusters of crimes vis-a-vis the population. A close comparison of the population's spatial distribution, reveals that population might have an effect on the crime rate across the counties. The @fig-2 suggest a non-linear relationship between population and crime in some of the counties. Therefore, the study use a non-linear model to estimate the specifications (1) and (2).
+| Statistical theory suggest for use of parallel of LM i.e., GLM with poison error term for the model fitting. For the purpose, the dependent variable that the study considers is the reported count of incidents of crime data, i.e., reported counts of incidents of hate crime and property crime.
+| Further, in the study uses poisson count data models to measure relationship between counts of reported incidents property crime and hate crime with time using Generalised Linear Model and Generalised Mixed-effects Model (GLMER). Since, the data qualifies to be classified as *'repeated measure',* therefore, fitting GLMER has the theoretical justification. The study, fits GLM and GLMER (intercept and slope model) to the specifications (1) and (2) and the results are presented in @tbl-4. Examining the estimates, the study observes that GLM estimates for Year are negative and statistical significant on both count of reported hate crime and count of reported property crime. However, this is not the only direction of relationship the study puts forth. Examining the GLMER estimates, the study notes that there is a statistical significant and positive coefficient of Year for count of reported hate crime, while it is insignificant for the count of reported property crime.
+
+```{r}
+#| label: tbl-2
+#| tbl-cap: ANOVA (Property Crime Rate-LM and LMER model comparison)
+rownames(mod11) <- c("LMER (Intercept)", "LMER (Intercept-Slope)")
+opts <- options(knitr.kable.NA = "")
+kable(mod11, "pipe", digits = 1, escape = FALSE, booktabs = TRUE)
+
+```
+
+```{r}
+#| label: tbl-3
+#| tbl-cap: ANOVA (Hate Crime Rate-LM and LMER model comparison)
+rownames(mod12) <- c("LMER (Intercept)", "LMER (Intercept-Slope)")
+opts <- options(knitr.kable.NA = "")
+kable(mod12, "pipe", digits = 1, escape = FALSE, booktabs = TRUE)
+```
+
+| The study find contrasting directions of coefficients of Year for count of reported hate crime, and therefore analysing the variance of the two models becomes paramount for statistical conclusions. The Anova results for are presented in the @tbl-5. The results clearly indicate statistical choice in favor of GLMER model. Additionally, the value of log-likelihood, AIC and BIC also indicate that GLMER model captures the variability in the data better than GLM.
+| The study used GLMER ransom intercept and slopes model to fit the reported count of hate crime data. For this to be visually true, there must be some variability in the slope coefficients of the variable Year for each county in the State of Maryland. A visual plot of the variability in the slopes is plotted in the @fig-3. In the plot, the vertical axis records the county while the horizontal axis records the value of Year variable coefficient from the GLMER model fit of the reported count of hate crime data. The variability strongly support the study's decision of fitting a random slopes and random intercept model.
+
+```{r}
+#| label: tbl-4
+#| tbl-cap: Generalised Linear Mixed Effects Model estimates
+
+models2 <- list(
+  "GLM (hate)" = glm(crime_count_h ~ YEAR_2 + Population + counties, data = crime_d1, family = "poisson"),
+  "GLM (Property)" = glm(crime_count_p ~ YEAR_2 + Population + counties, data = crime_d1, family = "poisson"),
+  "GLMER (hate)" = glmer(crime_count_h ~ YEAR_2  + (1+ YEAR_2|counties), data = crime_d1, family = "poisson"),
+  "GLMER (Property)" = glmer(crime_count_p ~ YEAR_2  + (1+ YEAR_2|counties), data = crime_d1, family = "poisson"))
+
+ modelsummary(models2, fmt=2, stars = TRUE, coef_omit = ".*counties*", align = "lrrrr", gof_omit = 'R2 Marg.|R2 Cond.|AIC|BIC|ICC', effects = "fixed",  coef_rename = c("YEAR_2" = "Year"))
+
+```
+
+{{< pagebreak >}}
+
+```{r}
+#| label: fig-3
+#| fig-cap: "Change in Reported Hate crime per year"
+
+# Extract out the fixed-effect slope for Year2
+Year2_slope <- fixef(glmer_crime_h )['YEAR_2']
+ 
+# Extract out the random-effect slopes for county
+county_slope <- ranef(glmer_crime_h )$counties
+ 
+# Create a new column for the slope
+county_slope$slope <- county_slope$YEAR_2 + Year2_slope
+
+# Use the row names to create a county name column
+county_slope$counties <- rownames(county_slope)
+
+# Create an ordered county-level factor based upon slope values
+county_slope$county_plot <- factor(county_slope$counties, 
+                                  levels = county_slope$counties[order(county_slope$slope)])
+
+# Now plot the results using ggplot2
+ggplot(data = county_slope, aes(x = county_plot, y = slope)) + 
+    geom_point() +
+    coord_flip() +
+    theme_bw() +
+    ylab("Change in count of hate crimes per year")  +
+    xlab("Counties")
+```
+
+```{r}
+#| label: tbl-5
+#| tbl-cap: Anova (Hate Crime Rate-GLM and GLMER model comparison)
+rownames(mod2) <- c("GLMER", "GLM")
+opts <- options(knitr.kable.NA = "")
+kable(mod2, "pipe", digits = 1, escape = FALSE, booktabs = TRUE)
+
+```
+
+```{r, results='hide'}
+
+# Use fixef() to view fixed-effects
+
+fixef(lmer_crime_i)
+fixef(lmer_crime_is)
+
+# Use ranef() to view random-effects
+ranef(lmer_crime_i)
+ranef(lmer_crime_is)
+
+
+```
+
+## Limitations
+
+There are some limitations of the study that should be noted at this point of time. The focus of this study was to explore linear and non-linear relationship between the forms of crimes over time and restricting to only these two possible form of relationships is itself a limitation. This is because the study does not explore spatial-dependence of crime across counties. All counties share their boundaries with other counties and counties at the boundary of the states share thier boundaries with counties from other states. This means there is an internal spatial dependence along with an external spatial dependence, the study should correct coefficients for (based on the fact, how it defines boundary criteria). For instance, crime rate could be higher in counties towards the periphery of the state because there is a spill over of criminal activity (cause of crime) from other states. Further, some counties of Maryland share their boundaries with the Atlantic ocean, the nature of crimes could be different in these counties.
+
+Secondly, the study did not include several plausible control variables, those may create a co-founding effect leading to omitted variable bias. These could be factors like aspects of culture, ethnicity, religion adherence rate, sex ratio, policing, social support, unemployment and other demographic and socio-economic variables. The study did include population, but surely, non-inclusion of others may cause issues in perfectly measuring causal relationship.
+
+For reasons of heterogeneous population and socio- economic differences across counties and states, the job of policy marker would be difficult with only such naive analysis of crime data.
+
+Lastly, for the measurement, the study did not consider several non-linear estimation techniques like GAMS or Bayesian modelling. These methods may allow the study to estimate credible confidence interval for random effects.
+
+## Conclusion
+
+The aim of this study was to examine the relationship of hate crime and crime against property with time in counties of the State of Maryland. For the purpose, the study used the crime data maintained by the Maryland Statistical Analysis center. The study presented a graphical analysis of the trend of hate crime rate and property crime rate over time for all counties. The graphical analysis indicated that trend varies with county and has different intercept.
+
+The study fitted linear model onto the crime date to ascertain the relationship. The variable year did have a strong linear relation with the crime rate in linear fit, LMER with random intercept and LMER with random intercept and slope model. However, the population variable did not conform to the linear structure of the fit.
+
+The study then presented a spatial graphical analysis of the population and crime rate to investigate if there is an non-linear relationship that can fit the data. For the purpose, the study did fit GLM and GLMER with random intercepts and random slopes to the data and analysis of variance did confirm a rise in hate crime in the counties of Maryland. This result stood in contrast to the previous findings of the data fit.
+
+Lastly, the study presented the graphical representation of change in count of hate crimes per year obtained from the GLMER to empahise the variability of hate crime rate across the counties.
+
+## Appendix- A
+
+```{r}
+#| label: fig-4
+#| fig-cap: Residual plots of LMER and GLMER
+
+plot1 <- resid(lmer_crime_is)
+plot(plot1)
+
+```
+
+@fig-4 plots the residual plots of the LMER and GLMER models. It is clearly evident that residuals are symmetrically distributed around zero.
+
+-   Plot-1 is the residual plot of LMER-property crime rate.
+
+-   Plot-2 is the residual plot of LMER-hate crime rate.
+
+-   Plot-3 is the residual plot of GLMER-hate crime rate.
+
+```{r}
+#| label: fig-5
+#| fig-cap: Residual plots of LMER and GLMER
+
+plot2 <- resid(lmer_crime_ish)
+plot(plot2)
+
+```
+
+```{r}
+#| label: fig-6
+#| fig-cap: Residual plots of LMER and GLMER
+
+plot3 <- resid(glmer_crime_h)
+plot(plot3)
+
+```
+
+\newpage
+
+## References
