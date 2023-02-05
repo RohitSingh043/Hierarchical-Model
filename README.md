@@ -12,5 +12,4 @@ of the USA (Miethe, Hughes, and McDowall 1991). In addition to this, the study a
 relationship of number of hate crime in the counties of Maryland using Generalised linear mixed effects
 models. Since, the data has a panel arrangement, i.e., the data are collected by each county and year
 with data available for count of different forms of crimes, therefore, statistically, it makes theoretical
-sense to use Poisson error term instead of standard Gaussian error term for model fitting(Econometric
-Analysis of Count Data 2008)
+sense to use Poisson error term instead of standard Gaussian error term for model fitting.
